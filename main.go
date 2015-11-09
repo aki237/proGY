@@ -22,7 +22,7 @@ type proxy struct {
 	encauth       string
 }
 
-
+//Init variables
 var matchid = uint64(0)
 var connid = uint64(0)
 var localAddr = flag.String("l", ":9999", "local address")
@@ -32,6 +32,7 @@ var verbose = flag.Bool("v", false, "display server actions")
 var veryverbose = flag.Bool("vv", false, "display server actions and all tcp data")
 var nagles = flag.Bool("n", false, "disable nagles algorithm")
 
+//Main function to start the server
 func main() {
 	flag.Parse()
 	fmt.Printf("Proxying from %v to %v\n", *localAddr, *remoteAddr)	

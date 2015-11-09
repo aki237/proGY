@@ -1,0 +1,173 @@
+package main
+
+import (
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+	"net"
+	b64 "encoding/base64"
+)
+
+//A proxy represents a pair of connections and their state
+type proxy struct {
+	sentBytes     uint64
+	receivedBytes uint64
+	laddr, raddr  *net.TCPAddr
+	lconn, rconn  *net.TCPConn
+	erred         bool
+	errsig        chan bool
+	prefix        string
+	encauth       string
+}
+
+
+var matchid = uint64(0)
+var connid = uint64(0)
+var localAddr = flag.String("l", ":9999", "local address")
+var remoteAddr = flag.String("r", "10.1.1.18:80", "Remote Proxy Address")
+var authpair = flag.String("a","<username>:<password>","Proxy authentication details -- dont use quotes for it")
+var verbose = flag.Bool("v", false, "display server actions")
+var veryverbose = flag.Bool("vv", false, "display server actions and all tcp data")
+var nagles = flag.Bool("n", false, "disable nagles algorithm")
+
+func main() {
+	flag.Parse()
+	fmt.Printf("Proxying from %v to %v\n", *localAddr, *remoteAddr)	
+	laddr, err := net.ResolveTCPAddr("tcp", *localAddr)
+	check(err)
+	raddr, err := net.ResolveTCPAddr("tcp", *remoteAddr)
+	check(err)
+	listener, err := net.ListenTCP("tcp", laddr)
+	check(err)
+	encauth := b64.StdEncoding.EncodeToString([]byte(*authpair))
+	fmt.Println(encauth)
+
+	if *veryverbose {
+		*verbose = true
+	}
+
+	for {
+		conn, err := listener.AcceptTCP()
+		if err != nil {
+			fmt.Printf("Failed to accept connection '%s'\n", err)
+			continue
+		}
+		connid++
+
+		p := &proxy{
+			lconn:    conn,
+			laddr:    laddr,
+			raddr:    raddr,
+			erred:    false,
+			errsig:   make(chan bool),
+			prefix:   fmt.Sprintf("Connection #%03d ", connid),
+			encauth:  encauth,
+		}
+		go p.start()
+	}
+}
+
+//Logging function
+func (p *proxy) log(s string, args ...interface{}) {
+	if *verbose {
+		log(p.prefix+s, args...)
+	}
+}
+
+//Proxy error fuction
+func (p *proxy) err(s string, err error) {
+	if p.erred {
+		return
+	}
+	if err != io.EOF {
+		log(p.prefix+s, err)
+	}
+	p.errsig <- true
+	p.erred = true
+}
+
+
+//Proxy Dial function
+func (p *proxy) start() {
+	defer p.lconn.Close()
+	//connect to remote
+	rconn, err := net.DialTCP("tcp", nil, p.raddr)
+	if err != nil {
+		p.err("Remote connection failed: %s", err)
+		return
+	}
+	p.rconn = rconn
+	defer p.rconn.Close()
+	//nagles?
+	if *nagles {
+		p.lconn.SetNoDelay(true)
+		p.rconn.SetNoDelay(true)
+	}
+	//display both ends
+	p.log("Opened %s → %s", p.lconn.RemoteAddr().String(), p.rconn.RemoteAddr().String())
+	//bidirectional copy
+	go p.pipe(p.lconn, p.rconn)
+	go p.pipe(p.rconn, p.lconn)
+	//wait for close...
+	<-p.errsig
+	p.log("Closed (%d bytes sent, %d bytes recieved)", p.sentBytes, p.receivedBytes)
+}
+
+
+//Piping proxy requests to the remote
+func (p *proxy) pipe(src, dst *net.TCPConn) {
+	var f string
+	islocal := src == p.lconn
+	buff := make([]byte, 0xffff)
+	for {
+		n, err := src.Read(buff)
+		if err != nil {
+			p.err("Read failed '%s'\n", err)
+			return
+		}
+		b := buff[:n]
+		if islocal{
+			netstr := strings.Replace(string(b),"\nUser-Agent","\nProxy-Authorization: Basic "+p.encauth+"\nUser-Agent: ",1)
+			b = []byte(netstr)
+			f = "Sent -> "
+		}else{
+			f = "Recv -> "
+		}
+		//show output
+		if *veryverbose {
+			if islocal{
+				fmt.Println(string(b))
+			}
+		} else {
+			if islocal{
+				fmt.Println(f,n)
+			}
+		}
+		//write out result
+		n, err = dst.Write(b)
+		if err != nil {
+			p.err("Write failed '%s'\n", err)
+			return
+		}
+		if islocal {
+			p.sentBytes += uint64(n)
+		} else {
+			p.receivedBytes += uint64(n)
+		}
+	}
+}
+
+//helper functions
+
+func check(err error) {
+	if err != nil {
+		log(err.Error())
+		os.Exit(1)
+	}
+}
+
+func log(f string, args ...interface{}) {
+	fmt.Printf(f, args...)
+}

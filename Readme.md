@@ -21,3 +21,26 @@ If the network traffic is to be monitored : add a -v to the command. THis make l
 
 If a LAN IP is assigned to the host PC ,say 192.168.1.100, then proGY can be run in that address, thus accessible
 to all the devices in the network.
+Actually I got sick of the commandline arguments. So write a config file ".progy" in json format that conatains the
+following ...
+
+```Json
+{
+    "listenaddress":"[local_listen_address]:[port]",
+    "remoteproxyaddress":"[remote_proxy_address]:[remote_proxy_port]",
+    "username":"[remote_proxy_username]",
+    "password":"[remote_proxy_password]",
+    "verbose":[true or false without quotes]
+}
+```
+
+### Example 
+```Json
+{
+    "listenaddress":"127.0.0.1:9999",
+    "remoteproxyaddress":"10.8.8.90:80",
+    "username":"alanthick",
+    "password":"canadian",
+    "verbose":true
+}
+```

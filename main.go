@@ -4,11 +4,21 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"strings"
 	"net"
+	"encoding/json"
 	b64 "encoding/base64"
 )
+
+type Config struct{
+	Listenaddress string
+	Remoteproxyaddress string
+	Username string
+	Password string
+	Verbose bool
+}
 
 //A proxy represents a pair of connections and their state
 type proxy struct {
@@ -34,7 +44,18 @@ var nagles = flag.Bool("n", false, "disable nagles algorithm")
 
 //Main function to start the server
 func main() {
+	home := os.Getenv("HOME")
 	flag.Parse()
+	content,err := ioutil.ReadFile(home+"/.progy")
+	if (err != nil){
+		fmt.Println("Unable to open config file : Using defaults",err)
+	}
+	var conf Config
+	err = json.Unmarshal(content,&conf)
+	*localAddr = conf.Listenaddress
+	*remoteAddr = conf.Remoteproxyaddress
+	*authpair = conf.Username+":"+conf.Password
+	*verbose = conf.Verbose
 	fmt.Printf("Proxying from %v to %v\n", *localAddr, *remoteAddr)	
 	laddr, err := net.ResolveTCPAddr("tcp", *localAddr)
 	check(err)

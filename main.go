@@ -117,7 +117,7 @@ func (p *proxy) start() {
 	//connect to remote
 	rconn, err := net.DialTCP("tcp", nil, p.raddr)
 	if err != nil {
-		p.err("Remote connection failed: %s", err)
+		p.err("Remote connection failed: %s\n", err)
 		return
 	}
 	p.rconn = rconn
@@ -128,13 +128,13 @@ func (p *proxy) start() {
 		p.rconn.SetNoDelay(true)
 	}
 	//display both ends
-	p.log("Opened %s → %s", p.lconn.RemoteAddr().String(), p.rconn.RemoteAddr().String())
+	p.log("Opened %s → %s\n", p.lconn.RemoteAddr().String(), p.rconn.RemoteAddr().String())
 	//bidirectional copy
 	go p.pipe(p.lconn, p.rconn)
 	go p.pipe(p.rconn, p.lconn)
 	//wait for close...
 	<-p.errsig
-	p.log("Closed (%d bytes sent, %d bytes recieved)", p.sentBytes, p.receivedBytes)
+	p.log("Closed (%d bytes sent, %d bytes recieved)\n", p.sentBytes, p.receivedBytes)
 }
 
 
@@ -151,8 +151,24 @@ func (p *proxy) pipe(src, dst *net.TCPConn) {
 		}
 		b := buff[:n]
 		if islocal{
-			netstr := strings.Replace(string(b),"\nUser-Agent","\nProxy-Authorization: Basic "+p.encauth+"\nUser-Agent: ",1)
+			var netstr string = string(b)
+			if (strings.Contains(netstr,"User-Agent")){
+				netstr = strings.Replace(netstr,"\nUser-Agent:","\nProxy-Authorization: Basic "+p.encauth+"\nUser-Agent:",1)
+			}else{
+				if(strings.Contains(netstr,"CONNECT")||strings.Contains(netstr,"GET")){
+					netstr = strings.Replace(netstr,"\n","\nProxy-Authorization: Basic "+p.encauth+"\n",1)
+				}
+			}
+			// if(strings.Contains(netstr,"youtube.com")){
+			// 	addrs,err := net.LookupHost("www.youtube.com")
+			// 	if err != nil{
+			// 		log("Unable to reach the DNS")
+			// 	}
+			// 	netstr = "CONNECT "+addrs[1]+":443 HTTP/1.1\nProxy-Authorization: Basic "+p.encauth+"\n\n"
+			// 	fmt.Println(netstr)
+			// }
 			b = []byte(netstr)
+			//go writeToFile(netstr)
 			f = "Sent -> "
 		}else{
 			f = "Recv -> "
@@ -192,4 +208,18 @@ func check(err error) {
 
 func log(f string, args ...interface{}) {
 	fmt.Printf(f, args...)
+}
+
+//
+func writeToFile(content string)  {
+	f, err := os.OpenFile(os.Getenv("HOME")+"/progylog", os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	content = content + "#INDICATOR#m\n------------------------------------\n\n===========================================================\n\n-----------------------------\n"
+	_, err = f.WriteString(content)
+	if  err != nil {
+		panic(err)
+	}
 }

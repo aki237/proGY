@@ -26,21 +26,45 @@ following ...
 
 ```Json
 {
-    "listenaddress":"[local_listen_address]:[port]",
-    "remoteproxyaddress":"[remote_proxy_address]:[remote_proxy_port]",
-    "username":"[remote_proxy_username]",
-    "password":"[remote_proxy_password]",
-    "verbose":[true or false without quotes]
+    "listenaddress":":9999",
+    "remoteproxyaddress":"<listenaddress>:<port>",
+    "Creds":[
+	{
+	    "username":"<username1>",
+	    "password":"<password1>",
+	},
+	{
+	    "username":"<username2>",
+	    "password":"<password2>",
+	},
+	{
+	    "username":"<username3>",
+	    "password":"<password3>",
+	}
+    ],
+    "verbose":true
 }
 ```
 
 ### Example 
 ```Json
 {
-    "listenaddress":"127.0.0.1:9999",
-    "remoteproxyaddress":"10.8.8.90:80",
-    "username":"alanthick",
-    "password":"canadian",
+    "listenaddress":":9999",
+    "remoteproxyaddress":"134.8.9.13:80",
+    "Creds":[
+	{
+	    "username":"alanthicke",
+	    "password":"ohcanada",
+	},
+	{
+	    "username":"brobibs",
+	    "password":"milliondollaridea",
+	},
+	{
+	    "username":"awesomium",
+	    "password":"elementbybarney",
+	}
+    ],
     "verbose":true
 }
 ```

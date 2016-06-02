@@ -9,14 +9,21 @@ import (
 	"strings"
 	"net"
 	"encoding/json"
+	random "math/rand"
 	b64 "encoding/base64"
 )
+
+type Cred struct{
+	Username string
+	Password string
+}
+
+type Creds []Cred
 
 type Config struct{
 	Listenaddress string
 	Remoteproxyaddress string
-	Username string
-	Password string
+	ProxyCreds Creds
 	Verbose bool
 }
 
@@ -29,7 +36,7 @@ type proxy struct {
 	erred         bool
 	errsig        chan bool
 	prefix        string
-	encauth       string
+	encauth       []string
 }
 
 //Init variables
@@ -54,7 +61,6 @@ func main() {
 	err = json.Unmarshal(content,&conf)
 	*localAddr = conf.Listenaddress
 	*remoteAddr = conf.Remoteproxyaddress
-	*authpair = conf.Username+":"+conf.Password
 	*verbose = conf.Verbose
 	fmt.Printf("Proxying from %v to %v\n", *localAddr, *remoteAddr)	
 	laddr, err := net.ResolveTCPAddr("tcp", *localAddr)
@@ -63,7 +69,10 @@ func main() {
 	check(err)
 	listener, err := net.ListenTCP("tcp", laddr)
 	check(err)
-	encauth := b64.StdEncoding.EncodeToString([]byte(*authpair))
+	encauth := make([]string,0)
+	for _,val := range conf.Creds {
+		encauth = append(encauth,b64.StdEncoding.EncodeToString([]byte(val.Username+":"+val.Password)))
+	}
 	fmt.Println(encauth)
 
 	if *veryverbose {
@@ -153,22 +162,13 @@ func (p *proxy) pipe(src, dst *net.TCPConn) {
 		if islocal{
 			var netstr string = string(b)
 			if (strings.Contains(netstr,"User-Agent")){
-				netstr = strings.Replace(netstr,"\nUser-Agent:","\nProxy-Authorization: Basic "+p.encauth+"\nUser-Agent:",1)
+				netstr = strings.Replace(netstr,"\nUser-Agent:","\nProxy-Authorization: Basic "+p.encauth[random.Intn(len(p.encauth))]+"\nUser-Agent:",1)
 			}else{
 				if(strings.Contains(netstr,"CONNECT")||strings.Contains(netstr,"GET")){
-					netstr = strings.Replace(netstr,"\n","\nProxy-Authorization: Basic "+p.encauth+"\n",1)
+					netstr = strings.Replace(netstr,"\n","\nProxy-Authorization: Basic "+p.encauth[random.Intn(len(p.encauth))]+"\n",1)
 				}
 			}
-			// if(strings.Contains(netstr,"youtube.com")){
-			// 	addrs,err := net.LookupHost("www.youtube.com")
-			// 	if err != nil{
-			// 		log("Unable to reach the DNS")
-			// 	}
-			// 	netstr = "CONNECT "+addrs[1]+":443 HTTP/1.1\nProxy-Authorization: Basic "+p.encauth+"\n\n"
-			// 	fmt.Println(netstr)
-			// }
 			b = []byte(netstr)
-			//go writeToFile(netstr)
 			f = "Sent -> "
 		}else{
 			f = "Recv -> "

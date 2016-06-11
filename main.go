@@ -23,7 +23,7 @@ type Creds []Cred
 type Config struct{
 	Listenaddress string
 	Remoteproxyaddress string
-	ProxyCreds Creds
+	Creds Creds
 	Verbose bool
 }
 

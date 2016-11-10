@@ -8,6 +8,13 @@ go get -u github.com/aki237/proGY
 ```
 If `$GOPATH/bin` is in your path then you are good to go. Else add it in your $PATH variable.
 
+Now a binary release is made possible for systemd based linux distros (x86_64).
+```shell
+$ curl -L "https://git.io/vXanp" | sh
+```
+This will setup proGY for you automatically. Don't run this script as root. Answer the followup questions and you'll be good to go.
+
+
 ## Usage
 
 ```Shell

@@ -1,30 +1,33 @@
 package main
 
 import (
+	b64 "encoding/base64"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
+	random "math/rand"
+	"net"
 	"os"
 	"strings"
-	"net"
-	"encoding/json"
-	random "math/rand"
-	b64 "encoding/base64"
 )
 
-type Cred struct{
-	Username string
-	Password string
+// Cred is a struct for holding the proxy authentication credentials (username, password)
+type Cred struct {
+	Username string // Username : variable for holding username
+	Password string // Password : variable for holding password
 }
 
+// Creds is of the type slice of Cred
 type Creds []Cred
 
-type Config struct{
-	Listenaddress string
-	Remoteproxyaddress string
-	Creds Creds
-	Verbose bool
+// Config is the struct used to hold the configuration read from the configuration file
+type Config struct {
+	Listenaddress      string // ListenAddress : local listen address
+	Remoteproxyaddress string // Remoteproxyaddress : remote proxy address
+	Creds              Creds  // Creds : Slice of all credentials for the specified remote proxy address
+	Verbose            bool   // Verbose : Whether to be verbose about the output
 }
 
 //A proxy represents a pair of connections and their state
@@ -44,7 +47,7 @@ var matchid = uint64(0)
 var connid = uint64(0)
 var localAddr = flag.String("l", ":9999", "local address")
 var remoteAddr = flag.String("r", "10.1.1.18:80", "Remote Proxy Address")
-var authpair = flag.String("a","<username>:<password>","Proxy authentication details -- dont use quotes for it")
+var authpair = flag.String("a", "<username>:<password>", "Proxy authentication details -- dont use quotes for it")
 var verbose = flag.Bool("v", false, "display server actions")
 var veryverbose = flag.Bool("vv", false, "display server actions and all tcp data")
 var nagles = flag.Bool("n", false, "disable nagles algorithm")
@@ -53,25 +56,25 @@ var nagles = flag.Bool("n", false, "disable nagles algorithm")
 func main() {
 	home := os.Getenv("HOME")
 	flag.Parse()
-	content,err := ioutil.ReadFile(home+"/.progy")
-	if (err != nil){
-		fmt.Println("Unable to open config file : Using defaults",err)
+	content, err := ioutil.ReadFile(home + "/.progy")
+	if err != nil {
+		fmt.Println("Unable to open config file : Using defaults", err)
 	}
 	var conf Config
-	err = json.Unmarshal(content,&conf)
+	err = json.Unmarshal(content, &conf)
 	*localAddr = conf.Listenaddress
 	*remoteAddr = conf.Remoteproxyaddress
 	*verbose = conf.Verbose
-	fmt.Printf("Proxying from %v to %v\n", *localAddr, *remoteAddr)	
+	fmt.Printf("Proxying from %v to %v\n", *localAddr, *remoteAddr)
 	laddr, err := net.ResolveTCPAddr("tcp", *localAddr)
 	check(err)
 	raddr, err := net.ResolveTCPAddr("tcp", *remoteAddr)
 	check(err)
 	listener, err := net.ListenTCP("tcp", laddr)
 	check(err)
-	encauth := make([]string,0)
-	for _,val := range conf.Creds {
-		encauth = append(encauth,b64.StdEncoding.EncodeToString([]byte(val.Username+":"+val.Password)))
+	encauth := make([]string, 0)
+	for _, val := range conf.Creds {
+		encauth = append(encauth, b64.StdEncoding.EncodeToString([]byte(val.Username+":"+val.Password)))
 	}
 	fmt.Println(encauth)
 
@@ -88,13 +91,13 @@ func main() {
 		connid++
 
 		p := &proxy{
-			lconn:    conn,
-			laddr:    laddr,
-			raddr:    raddr,
-			erred:    false,
-			errsig:   make(chan bool),
-			prefix:   fmt.Sprintf("Connection #%03d ", connid),
-			encauth:  encauth,
+			lconn:   conn,
+			laddr:   laddr,
+			raddr:   raddr,
+			erred:   false,
+			errsig:  make(chan bool),
+			prefix:  fmt.Sprintf("Connection #%03d ", connid),
+			encauth: encauth,
 		}
 		go p.start()
 	}
@@ -119,7 +122,6 @@ func (p *proxy) err(s string, err error) {
 	p.erred = true
 }
 
-
 //Proxy Dial function
 func (p *proxy) start() {
 	defer p.lconn.Close()
@@ -143,9 +145,8 @@ func (p *proxy) start() {
 	go p.pipe(p.rconn, p.lconn)
 	//wait for close...
 	<-p.errsig
-	p.log("Closed (%d bytes sent, %d bytes recieved)\n", p.sentBytes, p.receivedBytes)
+	p.log("Closed (%d bytes sent, %d bytes received)\n", p.sentBytes, p.receivedBytes)
 }
-
 
 //Piping proxy requests to the remote
 func (p *proxy) pipe(src, dst *net.TCPConn) {
@@ -159,28 +160,28 @@ func (p *proxy) pipe(src, dst *net.TCPConn) {
 			return
 		}
 		b := buff[:n]
-		if islocal{
+		if islocal {
 			var netstr string = string(b)
-			if (strings.Contains(netstr,"User-Agent")){
-				netstr = strings.Replace(netstr,"\nUser-Agent:","\nProxy-Authorization: Basic "+p.encauth[random.Intn(len(p.encauth))]+"\nUser-Agent:",1)
-			}else{
-				if(strings.Contains(netstr,"CONNECT")||strings.Contains(netstr,"GET")){
-					netstr = strings.Replace(netstr,"\n","\nProxy-Authorization: Basic "+p.encauth[random.Intn(len(p.encauth))]+"\n",1)
+			if strings.Contains(netstr, "User-Agent") {
+				netstr = strings.Replace(netstr, "\nUser-Agent:", "\nProxy-Authorization: Basic "+p.encauth[random.Intn(len(p.encauth))]+"\nUser-Agent:", 1)
+			} else {
+				if strings.Contains(netstr, "CONNECT") || strings.Contains(netstr, "GET") {
+					netstr = strings.Replace(netstr, "\n", "\nProxy-Authorization: Basic "+p.encauth[random.Intn(len(p.encauth))]+"\n", 1)
 				}
 			}
 			b = []byte(netstr)
 			f = "Sent -> "
-		}else{
+		} else {
 			f = "Recv -> "
 		}
 		//show output
 		if *veryverbose {
-			if islocal{
+			if islocal {
 				fmt.Println(string(b))
 			}
 		} else {
-			if islocal{
-				fmt.Println(f,n)
+			if islocal {
+				fmt.Println(f, n)
 			}
 		}
 		//write out result
@@ -211,7 +212,7 @@ func log(f string, args ...interface{}) {
 }
 
 //
-func writeToFile(content string)  {
+func writeToFile(content string) {
 	f, err := os.OpenFile(os.Getenv("HOME")+"/progylog", os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
 		panic(err)
@@ -219,7 +220,7 @@ func writeToFile(content string)  {
 	defer f.Close()
 	content = content + "#INDICATOR#m\n------------------------------------\n\n===========================================================\n\n-----------------------------\n"
 	_, err = f.WriteString(content)
-	if  err != nil {
+	if err != nil {
 		panic(err)
 	}
 }

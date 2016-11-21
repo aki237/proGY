@@ -40,6 +40,7 @@ type proxy struct {
 	errsig        chan bool
 	prefix        string
 	encauth       []string
+	site          string
 }
 
 //Init variables
@@ -105,9 +106,7 @@ func main() {
 
 //Logging function
 func (p *proxy) log(s string, args ...interface{}) {
-	if *verbose {
-		log(p.prefix+s, args...)
-	}
+	log(p.prefix+s, args...)
 }
 
 //Proxy error fuction
@@ -145,12 +144,12 @@ func (p *proxy) start() {
 	go p.pipe(p.rconn, p.lconn)
 	//wait for close...
 	<-p.errsig
-	p.log("Closed (%d bytes sent, %d bytes received)\n", p.sentBytes, p.receivedBytes)
+	p.log("Closed (%d bytes sent, %d bytes received) from %s\n", p.sentBytes, p.receivedBytes, p.site)
 }
 
 //Piping proxy requests to the remote
 func (p *proxy) pipe(src, dst *net.TCPConn) {
-	var f string
+	//var f string
 	islocal := src == p.lconn
 	buff := make([]byte, 0xffff)
 	for {
@@ -160,35 +159,38 @@ func (p *proxy) pipe(src, dst *net.TCPConn) {
 			return
 		}
 		b := buff[:n]
-		if islocal {
-			var netstr string = string(b)
-			if strings.Contains(netstr, "User-Agent") {
-				netstr = strings.Replace(netstr, "\nUser-Agent:", "\nProxy-Authorization: Basic "+p.encauth[random.Intn(len(p.encauth))]+"\nUser-Agent:", 1)
-			} else {
-				if strings.Contains(netstr, "CONNECT") || strings.Contains(netstr, "GET") {
-					netstr = strings.Replace(netstr, "\n", "\nProxy-Authorization: Basic "+p.encauth[random.Intn(len(p.encauth))]+"\n", 1)
+		netstr := string(b)
+		var host string
+		if islocal && (strings.Contains(netstr, "CONNECT") ||
+			strings.Contains(netstr, "GET") ||
+			strings.Contains(netstr, "POST")) {
+			netstr = strings.Replace(netstr, "\n", "\nProxy-Authorization: Basic "+p.encauth[random.Intn(len(p.encauth))]+"\n", 1)
+			reqtype := strings.Split(netstr, "\n")[0]
+			splitted := strings.Split(reqtype, " ")
+			if strings.Contains(splitted[0], "CONNECT") {
+				host = splitted[1]
+				if strings.Contains(host, ":") {
+					host = strings.Split(host, ":")[0]
 				}
+				ips, err := net.LookupIP(host)
+				if err != nil || len(ips) < 1 {
+					fmt.Println(err)
+					n, err = dst.Write([]byte(netstr))
+					if err != nil {
+						fmt.Println("Unable To connect to " + host)
+						break
+					}
+					break
+				}
+				IP := ips[0].String()
+				netstr = strings.Replace(netstr, host, IP, 1)
+				p.site = host
 			}
-			b = []byte(netstr)
-			f = "Sent -> "
-		} else {
-			f = "Recv -> "
 		}
-		//show output
-		if *veryverbose {
-			if islocal {
-				fmt.Println(string(b))
-			}
-		} else {
-			if islocal {
-				fmt.Println(f, n)
-			}
-		}
-		//write out result
-		n, err = dst.Write(b)
+		n, err = dst.Write([]byte(netstr))
 		if err != nil {
-			p.err("Write failed '%s'\n", err)
-			return
+			fmt.Println("Unable To connect")
+			break
 		}
 		if islocal {
 			p.sentBytes += uint64(n)
@@ -209,18 +211,4 @@ func check(err error) {
 
 func log(f string, args ...interface{}) {
 	fmt.Printf(f, args...)
-}
-
-//
-func writeToFile(content string) {
-	f, err := os.OpenFile(os.Getenv("HOME")+"/progylog", os.O_APPEND|os.O_WRONLY, 0600)
-	if err != nil {
-		panic(err)
-	}
-	defer f.Close()
-	content = content + "#INDICATOR#m\n------------------------------------\n\n===========================================================\n\n-----------------------------\n"
-	_, err = f.WriteString(content)
-	if err != nil {
-		panic(err)
-	}
 }

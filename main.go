@@ -3,6 +3,7 @@ package main
 import (
 	b64 "encoding/base64"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -28,6 +29,7 @@ type Config struct {
 	Remoteproxyaddress string // Remoteproxyaddress : remote proxy address
 	Creds              Creds  // Creds : Slice of all credentials for the specified remote proxy address
 	Verbose            bool   // Verbose : Whether to be verbose about the output
+	Domaincachefile    string // Size of the DNS Cache to be saved during runtime
 }
 
 //A proxy represents a pair of connections and their state
@@ -38,20 +40,12 @@ type proxy struct {
 	lconn, rconn  *net.TCPConn
 	erred         bool
 	errsig        chan bool
-	prefix        string
 	encauth       []string
 	site          string
 }
 
-//Init variables
-var matchid = uint64(0)
-var connid = uint64(0)
-var localAddr = flag.String("l", ":9999", "local address")
-var remoteAddr = flag.String("r", "10.1.1.18:80", "Remote Proxy Address")
-var authpair = flag.String("a", "<username>:<password>", "Proxy authentication details -- dont use quotes for it")
-var verbose = flag.Bool("v", false, "display server actions")
-var veryverbose = flag.Bool("vv", false, "display server actions and all tcp data")
-var nagles = flag.Bool("n", false, "disable nagles algorithm")
+var verbose bool
+var dnscache Cache
 
 //Main function to start the server
 func main() {
@@ -63,13 +57,20 @@ func main() {
 	}
 	var conf Config
 	err = json.Unmarshal(content, &conf)
-	*localAddr = conf.Listenaddress
-	*remoteAddr = conf.Remoteproxyaddress
-	*verbose = conf.Verbose
-	fmt.Printf("Proxying from %v to %v\n", *localAddr, *remoteAddr)
-	laddr, err := net.ResolveTCPAddr("tcp", *localAddr)
+	if err != nil {
+		log("Error : %s", err)
+		return
+	}
+	if conf.Domaincachefile == "" {
+		conf.Domaincachefile = home + "/.cache/dnscache.pgy"
+	}
+	localAddr := conf.Listenaddress
+	remoteAddr := conf.Remoteproxyaddress
+	verbose = conf.Verbose
+	fmt.Printf("Proxying from %v to %v\n", localAddr, remoteAddr)
+	laddr, err := net.ResolveTCPAddr("tcp", localAddr)
 	check(err)
-	raddr, err := net.ResolveTCPAddr("tcp", *remoteAddr)
+	raddr, err := net.ResolveTCPAddr("tcp", remoteAddr)
 	check(err)
 	listener, err := net.ListenTCP("tcp", laddr)
 	check(err)
@@ -77,11 +78,8 @@ func main() {
 	for _, val := range conf.Creds {
 		encauth = append(encauth, b64.StdEncoding.EncodeToString([]byte(val.Username+":"+val.Password)))
 	}
-	fmt.Println(encauth)
-
-	if *veryverbose {
-		*verbose = true
-	}
+	dnscache, err = NewCache(conf.Domaincachefile)
+	check(err)
 
 	for {
 		conn, err := listener.AcceptTCP()
@@ -89,15 +87,12 @@ func main() {
 			fmt.Printf("Failed to accept connection '%s'\n", err)
 			continue
 		}
-		connid++
-
 		p := &proxy{
 			lconn:   conn,
 			laddr:   laddr,
 			raddr:   raddr,
 			erred:   false,
 			errsig:  make(chan bool),
-			prefix:  fmt.Sprintf("Connection #%03d ", connid),
 			encauth: encauth,
 		}
 		go p.start()
@@ -106,7 +101,7 @@ func main() {
 
 //Logging function
 func (p *proxy) log(s string, args ...interface{}) {
-	log(p.prefix+s, args...)
+	log(s, args...)
 }
 
 //Proxy error fuction
@@ -115,7 +110,7 @@ func (p *proxy) err(s string, err error) {
 		return
 	}
 	if err != io.EOF {
-		log(p.prefix+s, err)
+		log(err.Error())
 	}
 	p.errsig <- true
 	p.erred = true
@@ -133,18 +128,20 @@ func (p *proxy) start() {
 	p.rconn = rconn
 	defer p.rconn.Close()
 	//nagles?
-	if *nagles {
-		p.lconn.SetNoDelay(true)
-		p.rconn.SetNoDelay(true)
-	}
+	p.lconn.SetNoDelay(true)
+	p.rconn.SetNoDelay(true)
 	//display both ends
-	p.log("Opened %s → %s\n", p.lconn.RemoteAddr().String(), p.rconn.RemoteAddr().String())
+	if verbose {
+		p.log("Opened %s → %s\n", p.lconn.RemoteAddr().String(), p.rconn.RemoteAddr().String())
+	}
 	//bidirectional copy
 	go p.pipe(p.lconn, p.rconn)
 	go p.pipe(p.rconn, p.lconn)
 	//wait for close...
 	<-p.errsig
-	p.log("Closed (%d bytes sent, %d bytes received) from %s\n", p.sentBytes, p.receivedBytes, p.site)
+	if verbose {
+		p.log("Closed (%d bytes sent, %d bytes received) from %s\n", p.sentBytes, p.receivedBytes, p.site)
+	}
 }
 
 //Piping proxy requests to the remote
@@ -152,8 +149,14 @@ func (p *proxy) pipe(src, dst *net.TCPConn) {
 	//var f string
 	islocal := src == p.lconn
 	buff := make([]byte, 0xffff)
+	var n int
 	for {
-		n, err := src.Read(buff)
+		var err error
+		n, err = src.Read(buff)
+		if n == 0 {
+			p.err("Done", errors.New("Done reading"))
+			return
+		}
 		if err != nil {
 			p.err("Read failed '%s'\n", err)
 			return
@@ -172,25 +175,27 @@ func (p *proxy) pipe(src, dst *net.TCPConn) {
 				if strings.Contains(host, ":") {
 					host = strings.Split(host, ":")[0]
 				}
-				ips, err := net.LookupIP(host)
-				if err != nil || len(ips) < 1 {
+				//ips, err := net.LookupIP(host)
+				ip, err := dnscache.LookupIP(host)
+				if err != nil {
 					fmt.Println(err)
 					n, err = dst.Write([]byte(netstr))
 					if err != nil {
-						fmt.Println("Unable To connect to " + host)
-						break
+						p.err("Error : ", err)
+						return
 					}
-					break
+					return
 				}
-				IP := ips[0].String()
+				//IP := ips[0].String()
+				IP := ip
 				netstr = strings.Replace(netstr, host, IP, 1)
 				p.site = host
 			}
 		}
 		n, err = dst.Write([]byte(netstr))
 		if err != nil {
-			fmt.Println("Unable To connect")
-			break
+			p.err("Unable To connect : %s", err)
+			return
 		}
 		if islocal {
 			p.sentBytes += uint64(n)

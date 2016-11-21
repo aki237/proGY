@@ -18,7 +18,7 @@ This will setup proGY for you automatically. Don't run this script as root. Answ
 ## Usage
 
 ```Shell
-proGY -l="[local_listen_address]:[listen_port]" -r="[proxy_address]:[port]" -a=[Proxy_Username]:[Proxy_Password]
+proGY
 ```
 
 This starts a proxy server at the http://[local_listen_address]:[listen_port] and authenticating requests to the
@@ -36,20 +36,21 @@ following ...
     "listenaddress":":9999",
     "remoteproxyaddress":"<listenaddress>:<port>",
     "Creds":[
-	{
-	    "username":"<username1>",
-	    "password":"<password1>",
-	},
-	{
-	    "username":"<username2>",
-	    "password":"<password2>",
-	},
-	{
-	    "username":"<username3>",
-	    "password":"<password3>",
-	}
-    ],
-    "verbose":true
+		{
+			"username":"<username1>",
+			"password":"<password1>"
+		},
+		{
+			"username":"<username2>",
+			"password":"<password2>"
+		},
+		{
+			"username":"<username3>",
+			"password":"<password3>"
+		}
+	],
+	"domaincachefile" : "<cacheFileLocation>",
+	"verbose":true
 }
 ```
 
@@ -59,19 +60,26 @@ following ...
     "listenaddress":":9999",
     "remoteproxyaddress":"134.8.9.13:80",
     "Creds":[
-	{
-	    "username":"alanthicke",
-	    "password":"ohcanada",
-	},
-	{
-	    "username":"brobibs",
-	    "password":"milliondollaridea",
-	},
-	{
-	    "username":"awesomium",
-	    "password":"elementbybarney",
-	}
+		{
+			"username":"alanthicke",
+			"password":"ohcanada"
+		},
+		{
+			"username":"brobibs",
+			"password":"milliondollaridea"
+		},
+		{
+			"username":"awesomium",
+			"password":"elementbybarney"
+		}
     ],
+	"domaincachefile" : "/Users/stinson/.cache/dnscache.pgy",
     "verbose":true
 }
 ```
+
+## Domain Name Cache File
+Domain Name Cachefile points to a [bolt](https://github.com/boltdb/bolt) database file. 
+If you don't have the file already, bolt will create it automatically. This file is used to 
+store the maps of domain names to their IP addresses. This will make the tunnelling a lot faster than
+domain name lookup for every connection.

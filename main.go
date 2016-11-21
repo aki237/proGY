@@ -175,7 +175,6 @@ func (p *proxy) pipe(src, dst *net.TCPConn) {
 				if strings.Contains(host, ":") {
 					host = strings.Split(host, ":")[0]
 				}
-				//ips, err := net.LookupIP(host)
 				ip, err := dnscache.LookupIP(host)
 				if err != nil {
 					fmt.Println(err)
@@ -186,7 +185,6 @@ func (p *proxy) pipe(src, dst *net.TCPConn) {
 					}
 					return
 				}
-				//IP := ips[0].String()
 				IP := ip
 				netstr = strings.Replace(netstr, host, IP, 1)
 				p.site = host

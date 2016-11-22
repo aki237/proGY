@@ -157,7 +157,7 @@ func (p *proxy) start() {
 	go p.pipe(p.rconn, p.lconn)
 	//wait for close...
 	<-p.errsig
-	logger.Log(p.process, p.raddr.IP.String(), "", connid, false)
+	go logger.Log(p.process, p.raddr.IP.String(), "", connid, false)
 }
 
 //Piping proxy requests to the remote
@@ -187,7 +187,7 @@ func (p *proxy) pipe(src, dst *net.TCPConn) {
 			reqtype := strings.Split(netstr, "\n")[0]
 			splitted := strings.Split(reqtype, " ")
 			host = splitted[1]
-			logger.Log(p.process, p.raddr.IP.String(), host, connid, true)
+			go logger.Log(p.process, p.raddr.IP.String(), host, connid, true)
 			if strings.Contains(splitted[0], "CONNECT") {
 				if strings.Contains(host, ":") {
 					host = strings.Split(host, ":")[0]

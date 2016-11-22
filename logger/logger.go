@@ -29,21 +29,23 @@ func Init(port int) error {
 	if err != nil {
 		return err
 	}
+	go makeSingle()
+	return err
+}
+
+func makeSingle() {
+	t = tip{Closed: true}
 	conn, err := server.Accept()
 	if err != nil {
-		return err
+		return
 	}
-	t = tip{conn, false}
-	return err
+	t.Closed = false
+	t.Conn = conn
 }
 
 func Log(process, proxyServer, host string, connid int, opening bool) {
 	if t.Closed {
-		c, err := server.Accept()
-		if err != nil {
-			return
-		}
-		t = tip{c, false}
+		return
 	}
 	conn := &connection{
 		Process: process,
@@ -60,5 +62,6 @@ func Log(process, proxyServer, host string, connid int, opening bool) {
 	if err != nil {
 		t.Close()
 		t.Closed = true
+		go makeSingle()
 	}
 }

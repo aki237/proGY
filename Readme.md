@@ -50,7 +50,8 @@ following ...
 		}
 	],
 	"domaincachefile" : "<cacheFileLocation>",
-	"verbose":true
+	"verbose":true,
+	"loggerport" :  <SomePortAsInteger>
 }
 ```
 
@@ -74,7 +75,8 @@ following ...
 		}
     ],
 	"domaincachefile" : "/Users/stinson/.cache/dnscache.pgy",
-    "verbose":true
+    "verbose":true,
+    "loggerport" :  3030
 }
 ```
 
@@ -83,3 +85,21 @@ Domain Name Cachefile points to a [bolt](https://github.com/boltdb/bolt) databas
 If you don't have the file already, bolt will create it automatically. This file is used to 
 store the maps of domain names to their IP addresses. This will make the tunnelling a lot faster than
 domain name lookup for every connection.
+
+## Logger Service TCP Port
+This should be mentioned so that, the logger service will run at that port(TCP).
+**What is a Logger Service**
+It is a TCP based Cross Process Communication Service, with Json as the transport format.
+**Why is it used?**
+I used proGY as a systemd service. Till v1.02.1, it was spamming journal logs with lots of data 
+(Sent Bytes, Recieved Bytes). I used it only when internet seems to slouch a little bit. So I was only
+expecting for errors when I open the journal logs.
+**How to use it?**
+When you connect to the TCP server running at specified port using some program (say telnet), it will spit out 
+the json object of the connection made or closed. This can be used by other programs. Like for example *monitoring*
+
+## !Important!
+This branch is just testing and is inteded to work in any posix system which has the proc file system mounted.
+The running system has to have the `ss` command(not netstat). I have been writing another package to remove this
+external binary dependancy, replicating the functionalities of `ss` and `ps` commands in golang. Any help to
+write those packages will be apperitiated.

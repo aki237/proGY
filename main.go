@@ -11,7 +11,10 @@ import (
 	random "math/rand"
 	"net"
 	"os"
+	"os/exec"
 	"strings"
+
+	"github.com/aki237/proGY/logger"
 )
 
 // Cred is a struct for holding the proxy authentication credentials (username, password)
@@ -30,6 +33,7 @@ type Config struct {
 	Creds              Creds  // Creds : Slice of all credentials for the specified remote proxy address
 	Verbose            bool   // Verbose : Whether to be verbose about the output
 	Domaincachefile    string // Size of the DNS Cache to be saved during runtime
+	Loggerport         int    // What port to run the Logger at
 }
 
 //A proxy represents a pair of connections and their state
@@ -42,8 +46,11 @@ type proxy struct {
 	errsig        chan bool
 	encauth       []string
 	site          string
+	process       string
+	connid        int
 }
 
+var connid = 0
 var verbose bool
 var dnscache Cache
 
@@ -80,6 +87,8 @@ func main() {
 	}
 	dnscache, err = NewCache(conf.Domaincachefile)
 	check(err)
+	err = logger.Init(conf.Loggerport)
+	check(err)
 
 	for {
 		conn, err := listener.AcceptTCP()
@@ -87,6 +96,7 @@ func main() {
 			fmt.Printf("Failed to accept connection '%s'\n", err)
 			continue
 		}
+		connid++
 		p := &proxy{
 			lconn:   conn,
 			laddr:   laddr,
@@ -94,6 +104,7 @@ func main() {
 			erred:   false,
 			errsig:  make(chan bool),
 			encauth: encauth,
+			connid:  connid,
 		}
 		go p.start()
 	}
@@ -131,17 +142,22 @@ func (p *proxy) start() {
 	p.lconn.SetNoDelay(true)
 	p.rconn.SetNoDelay(true)
 	//display both ends
-	if verbose {
-		p.log("Opened %s → %s\n", p.lconn.RemoteAddr().String(), p.rconn.RemoteAddr().String())
+	host := strings.Split(p.lconn.RemoteAddr().String(), ":")[0]
+	port := strings.Split(p.lconn.RemoteAddr().String(), ":")[1]
+	o, _ := exec.Command("/sbin/ss", "-ntp", "src", host, "sport", "=", ":"+port).Output()
+	process := "systemAt:" + host
+	//fmt.Println(string(o))
+	splitted := strings.Split(string(o), "users:((\"")
+	if len(splitted) > 1 {
+		process = strings.Split(splitted[1], "\",pid=")[0]
 	}
+	p.process = process
 	//bidirectional copy
 	go p.pipe(p.lconn, p.rconn)
 	go p.pipe(p.rconn, p.lconn)
 	//wait for close...
 	<-p.errsig
-	if verbose {
-		p.log("Closed (%d bytes sent, %d bytes received) from %s\n", p.sentBytes, p.receivedBytes, p.site)
-	}
+	logger.Log(p.process, p.raddr.IP.String(), "", connid, false)
 }
 
 //Piping proxy requests to the remote
@@ -154,7 +170,7 @@ func (p *proxy) pipe(src, dst *net.TCPConn) {
 		var err error
 		n, err = src.Read(buff)
 		if n == 0 {
-			p.err("Done", errors.New("Done reading"))
+			p.err("", errors.New(""))
 			return
 		}
 		if err != nil {
@@ -170,8 +186,9 @@ func (p *proxy) pipe(src, dst *net.TCPConn) {
 			netstr = strings.Replace(netstr, "\n", "\nProxy-Authorization: Basic "+p.encauth[random.Intn(len(p.encauth))]+"\n", 1)
 			reqtype := strings.Split(netstr, "\n")[0]
 			splitted := strings.Split(reqtype, " ")
+			host = splitted[1]
+			logger.Log(p.process, p.raddr.IP.String(), host, connid, true)
 			if strings.Contains(splitted[0], "CONNECT") {
-				host = splitted[1]
 				if strings.Contains(host, ":") {
 					host = strings.Split(host, ":")[0]
 				}

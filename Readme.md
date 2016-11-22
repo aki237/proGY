@@ -8,13 +8,6 @@ go get -u github.com/aki237/proGY
 ```
 If `$GOPATH/bin` is in your path then you are good to go. Else add it in your $PATH variable.
 
-Now a binary release is made possible for systemd based linux distros (x86_64).
-```shell
-$ curl -L "https://git.io/vXanp" | sh
-```
-This will setup proGY for you automatically. Don't run this script as root. Answer the followup questions and you'll be good to go.
-
-
 ## Usage
 
 ```Shell
@@ -88,13 +81,19 @@ domain name lookup for every connection.
 
 ## Logger Service TCP Port
 This should be mentioned so that, the logger service will run at that port(TCP).
-**What is a Logger Service**
+
+#### What is a Logger Service
+
 It is a TCP based Cross Process Communication Service, with Json as the transport format.
-**Why is it used?**
+
+#### Why is it used?
+
 I used proGY as a systemd service. Till v1.02.1, it was spamming journal logs with lots of data 
 (Sent Bytes, Recieved Bytes). I used it only when internet seems to slouch a little bit. So I was only
 expecting for errors when I open the journal logs.
-**How to use it?**
+
+#### How to use it?
+
 When you connect to the TCP server running at specified port using some program (say telnet), it will spit out 
 the json object of the connection made or closed. This can be used by other programs. Like for example *monitoring*
 

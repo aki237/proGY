@@ -6,11 +6,13 @@ import (
 	"github.com/boltdb/bolt"
 )
 
+// Cache is a struct containing a boltdb object and the cachefile pointing to that file
 type Cache struct {
-	domainMap *bolt.DB
-	cachefile string
+	domainMap *bolt.DB // bolt.DB object
+	cachefile string   // file pointing to that boltdb file
 }
 
+// NewCache returns a Cache type object and error, if there is any error in opening the cachefile
 func NewCache(cachefile string) (Cache, error) {
 	a := Cache{cachefile: cachefile}
 	var err error
@@ -18,6 +20,9 @@ func NewCache(cachefile string) (Cache, error) {
 	return a, err
 }
 
+// LookupIP returns the IP string for a passed domain name and an error
+// if there is any error in fetching data from the cachefile or lookup from the DNS.
+// It is a method of Cache struct
 func (d *Cache) LookupIP(domain string) (string, error) {
 	IP := ""
 	err := d.domainMap.Update(func(tx *bolt.Tx) error {

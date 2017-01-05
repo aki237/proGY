@@ -186,25 +186,27 @@ func (p *proxy) pipe(src, dst *net.TCPConn) {
 			netstr = strings.Replace(netstr, "\n", "\nProxy-Authorization: Basic "+p.encauth[random.Intn(len(p.encauth))]+"\n", 1)
 			reqtype := strings.Split(netstr, "\n")[0]
 			splitted := strings.Split(reqtype, " ")
-			host = splitted[1]
-			go logger.Log(p.process, p.raddr.IP.String(), host, connid, true)
-			if strings.Contains(splitted[0], "CONNECT") {
-				if strings.Contains(host, ":") {
-					host = strings.Split(host, ":")[0]
-				}
-				ip, err := dnscache.LookupIP(host)
-				if err != nil {
-					fmt.Println(err)
-					n, err = dst.Write([]byte(netstr))
+			if len(splitted) > 1 {
+				host = splitted[1]
+				go logger.Log(p.process, p.raddr.IP.String(), host, connid, true)
+				if strings.Contains(splitted[0], "CONNECT") {
+					if strings.Contains(host, ":") {
+						host = strings.Split(host, ":")[0]
+					}
+					ip, err := dnscache.LookupIP(host)
 					if err != nil {
-						p.err("Error : ", err)
+						fmt.Println(err)
+						n, err = dst.Write([]byte(netstr))
+						if err != nil {
+							p.err("Error : ", err)
+							return
+						}
 						return
 					}
-					return
+					IP := ip
+					netstr = strings.Replace(netstr, host, IP, 1)
+					p.site = host
 				}
-				IP := ip
-				netstr = strings.Replace(netstr, host, IP, 1)
-				p.site = host
 			}
 		}
 		n, err = dst.Write([]byte(netstr))

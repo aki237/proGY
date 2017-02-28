@@ -66,11 +66,8 @@ var verbose bool
 var dnscache Cache
 
 func parseConfig(filename string) Config {
-	wordPtr := flag.String("config", filename, "Configuration file to be provided for proGY")
-	flag.Parse()
-
 	home := os.Getenv("HOME")
-	content, err := ioutil.ReadFile(*wordPtr)
+	content, err := ioutil.ReadFile(filename)
 	if err != nil {
 		log("Unable to open config file : Using defaults %s\n", err)
 		os.Exit(2)
@@ -114,7 +111,9 @@ func (conf *Config) getProxyStruct(conn *net.TCPConn) *proxy {
 //Main function to start the server
 func main() {
 	home := os.Getenv("HOME")
-	conf := parseConfig(home + "/.progy")
+	wordPtr := flag.String("config", home+"/.progy", "Configuration file to be provided for proGY")
+	flag.Parse()
+	conf := parseConfig(*wordPtr)
 	laddr, err := net.ResolveTCPAddr("tcp", conf.Listenaddress)
 	check(err)
 	listener, err := net.ListenTCP("tcp", laddr)

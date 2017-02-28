@@ -19,8 +19,10 @@ import (
 
 // Cred is a struct for holding the proxy authentication credentials (username, password)
 type Cred struct {
-	Username string // Username : variable for holding username
-	Password string // Password : variable for holding password
+	Username           string // Username : variable for holding username
+	Password           string // Password : variable for holding password
+	Remoteproxyaddress string // Remoteproxyaddress : remote proxy address
+	Encauth            string
 }
 
 // Creds is of the type slice of Cred
@@ -28,12 +30,21 @@ type Creds []Cred
 
 // Config is the struct used to hold the configuration read from the configuration file
 type Config struct {
-	Listenaddress      string // ListenAddress : local listen address
-	Remoteproxyaddress string // Remoteproxyaddress : remote proxy address
-	Creds              Creds  // Creds : Slice of all credentials for the specified remote proxy address
-	Verbose            bool   // Verbose : Whether to be verbose about the output
-	Domaincachefile    string // Size of the DNS Cache to be saved during runtime
-	Loggerport         int    // What port to run the Logger at
+	Listenaddress   string // ListenAddress : local listen address
+	Creds           Creds  // Creds : Slice of all credentials for the specified remote proxy address
+	Verbose         bool   // Verbose : Whether to be verbose about the output
+	Domaincachefile string // Size of the DNS Cache to be saved during runtime
+	Loggerport      int    // What port to run the Logger at
+}
+
+func (c *Config) Reloader(fileChannel chan string) {
+	for {
+		filename := <-fileChannel
+		temp := parseConfig(filename)
+		c.Creds = temp.Creds
+		c.Verbose = temp.Verbose
+		c.Domaincachefile = temp.Domaincachefile
+	}
 }
 
 //A proxy represents a pair of connections and their state
@@ -44,7 +55,7 @@ type proxy struct {
 	lconn, rconn  *net.TCPConn
 	erred         bool
 	errsig        chan bool
-	encauth       []string
+	encauth       string
 	site          string
 	process       string
 	connid        int
@@ -54,42 +65,67 @@ var connid = 0
 var verbose bool
 var dnscache Cache
 
-//Main function to start the server
-func main() {
-	home := os.Getenv("HOME")
+func parseConfig(filename string) Config {
+	wordPtr := flag.String("config", filename, "Configuration file to be provided for proGY")
 	flag.Parse()
-	content, err := ioutil.ReadFile(home + "/.progy")
+
+	home := os.Getenv("HOME")
+	content, err := ioutil.ReadFile(*wordPtr)
 	if err != nil {
-		fmt.Println("Unable to open config file : Using defaults", err)
+		log("Unable to open config file : Using defaults %s\n", err)
+		os.Exit(2)
 	}
 	var conf Config
 	err = json.Unmarshal(content, &conf)
 	if err != nil {
-		log("Error : %s", err)
-		return
+		log("Error : %s\n", err)
+		os.Exit(2)
 	}
 	if conf.Domaincachefile == "" {
 		conf.Domaincachefile = home + "/.cache/dnscache.pgy"
 	}
+	for i, val := range conf.Creds {
+		conf.Creds[i].Encauth = b64.StdEncoding.EncodeToString([]byte(val.Username + ":" + val.Password))
+	}
+	return conf
+}
+
+func (conf *Config) getProxyStruct(conn *net.TCPConn) *proxy {
 	localAddr := conf.Listenaddress
-	remoteAddr := conf.Remoteproxyaddress
+	currentProxy := conf.Creds[random.Intn(len(conf.Creds))]
+	remoteAddr := currentProxy.Remoteproxyaddress
 	verbose = conf.Verbose
-	fmt.Printf("Proxying from %v to %v\n", localAddr, remoteAddr)
 	laddr, err := net.ResolveTCPAddr("tcp", localAddr)
 	check(err)
 	raddr, err := net.ResolveTCPAddr("tcp", remoteAddr)
 	check(err)
+	proxyStruct := &proxy{
+		lconn:   conn,
+		laddr:   laddr,
+		raddr:   raddr,
+		erred:   false,
+		errsig:  make(chan bool),
+		encauth: currentProxy.Encauth,
+		connid:  connid,
+	}
+	return proxyStruct
+}
+
+//Main function to start the server
+func main() {
+	home := os.Getenv("HOME")
+	conf := parseConfig(home + "/.progy")
+	laddr, err := net.ResolveTCPAddr("tcp", conf.Listenaddress)
+	check(err)
 	listener, err := net.ListenTCP("tcp", laddr)
 	check(err)
-	encauth := make([]string, 0)
-	for _, val := range conf.Creds {
-		encauth = append(encauth, b64.StdEncoding.EncodeToString([]byte(val.Username+":"+val.Password)))
-	}
 	dnscache, err = NewCache(conf.Domaincachefile)
 	check(err)
 	err = logger.Init(conf.Loggerport)
 	check(err)
-
+	fileChannel := make(chan string)
+	go listenUnixControl(fileChannel)
+	go conf.Reloader(fileChannel)
 	for {
 		conn, err := listener.AcceptTCP()
 		if err != nil {
@@ -97,15 +133,7 @@ func main() {
 			continue
 		}
 		connid++
-		p := &proxy{
-			lconn:   conn,
-			laddr:   laddr,
-			raddr:   raddr,
-			erred:   false,
-			errsig:  make(chan bool),
-			encauth: encauth,
-			connid:  connid,
-		}
+		p := conf.getProxyStruct(conn)
 		go p.start()
 	}
 }
@@ -121,7 +149,7 @@ func (p *proxy) err(s string, err error) {
 		return
 	}
 	if err != io.EOF {
-		log(err.Error())
+		log(s, err.Error())
 	}
 	p.errsig <- true
 	p.erred = true
@@ -133,7 +161,7 @@ func (p *proxy) start() {
 	//connect to remote
 	rconn, err := net.DialTCP("tcp", nil, p.raddr)
 	if err != nil {
-		p.err("Remote connection failed: %s\n", err)
+		log("Remote connection failed: %s\n", err)
 		return
 	}
 	p.rconn = rconn
@@ -170,7 +198,7 @@ func (p *proxy) pipe(src, dst *net.TCPConn) {
 		var err error
 		n, err = src.Read(buff)
 		if n == 0 {
-			p.err("", errors.New(""))
+			p.err("%s", errors.New(""))
 			return
 		}
 		if err != nil {
@@ -183,7 +211,7 @@ func (p *proxy) pipe(src, dst *net.TCPConn) {
 		if islocal && (strings.Contains(netstr, "CONNECT") ||
 			strings.Contains(netstr, "GET") ||
 			strings.Contains(netstr, "POST")) {
-			netstr = strings.Replace(netstr, "\n", "\nProxy-Authorization: Basic "+p.encauth[random.Intn(len(p.encauth))]+"\n", 1)
+			netstr = strings.Replace(netstr, "\n", "\nProxy-Authorization: Basic "+p.encauth+"\n", 1)
 			reqtype := strings.Split(netstr, "\n")[0]
 			splitted := strings.Split(reqtype, " ")
 			if len(splitted) > 1 {
@@ -211,7 +239,7 @@ func (p *proxy) pipe(src, dst *net.TCPConn) {
 		}
 		n, err = dst.Write([]byte(netstr))
 		if err != nil {
-			p.err("Unable To connect : %s", err)
+			p.err("Unable To connect : %s\n", err)
 			return
 		}
 		if islocal {

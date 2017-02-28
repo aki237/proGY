@@ -27,17 +27,19 @@ following ...
 ```Json
 {
     "listenaddress":":9999",
-    "remoteproxyaddress":"<listenaddress>:<port>",
     "Creds":[
 		{
+			"remoteproxyaddress":"<listenaddress1>:<port1>",
 			"username":"<username1>",
 			"password":"<password1>"
 		},
 		{
+			"remoteproxyaddress":"<listenaddress2>:<port2>",
 			"username":"<username2>",
 			"password":"<password2>"
 		},
 		{
+			"remoteproxyaddress":"<listenaddress3>:<port3>",
 			"username":"<username3>",
 			"password":"<password3>"
 		}
@@ -52,17 +54,19 @@ following ...
 ```Json
 {
     "listenaddress":":9999",
-    "remoteproxyaddress":"134.8.9.13:80",
     "Creds":[
 		{
+			"remoteproxyaddress":"134.8.9.13:80",
 			"username":"alanthicke",
 			"password":"ohcanada"
 		},
 		{
+			"remoteproxyaddress":"134.8.9.34:9900",
 			"username":"brobibs",
 			"password":"milliondollaridea"
 		},
 		{
+			"remoteproxyaddress":"134.8.9.55:8080",
 			"username":"awesomium",
 			"password":"elementbybarney"
 		}

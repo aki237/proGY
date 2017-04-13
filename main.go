@@ -184,7 +184,7 @@ func (p *proxy) start() {
 	go p.pipe(p.rconn, p.lconn)
 	//wait for close...
 	<-p.errsig
-	go logger.Log(p.process, p.raddr.IP.String(), "", connid, false)
+	go logger.Log(p.process, p.raddr.IP.String(), p.site, connid, logger.STATUS_CLOSED, p.receivedBytes)
 }
 
 //Piping proxy requests to the remote
@@ -209,13 +209,14 @@ func (p *proxy) pipe(src, dst *net.TCPConn) {
 		var host string
 		if islocal && (strings.Contains(netstr, "CONNECT") ||
 			strings.Contains(netstr, "GET") ||
+			strings.Contains(netstr, "HEAD") ||
 			strings.Contains(netstr, "POST")) {
 			netstr = strings.Replace(netstr, "\n", "\nProxy-Authorization: Basic "+p.encauth+"\n", 1)
 			reqtype := strings.Split(netstr, "\n")[0]
 			splitted := strings.Split(reqtype, " ")
 			if len(splitted) > 1 {
 				host = splitted[1]
-				go logger.Log(p.process, p.raddr.IP.String(), host, connid, true)
+				go logger.Log(p.process, p.raddr.IP.String(), host, connid, logger.STATUS_OPENED, 0)
 				if strings.Contains(splitted[0], "CONNECT") {
 					if strings.Contains(host, ":") {
 						host = strings.Split(host, ":")[0]
@@ -232,8 +233,8 @@ func (p *proxy) pipe(src, dst *net.TCPConn) {
 					}
 					IP := ip
 					netstr = strings.Replace(netstr, host, IP, 1)
-					p.site = host
 				}
+				p.site = host
 			}
 		}
 		n, err = dst.Write([]byte(netstr))
@@ -245,6 +246,7 @@ func (p *proxy) pipe(src, dst *net.TCPConn) {
 			p.sentBytes += uint64(n)
 		} else {
 			p.receivedBytes += uint64(n)
+			go logger.Log(p.process, p.raddr.IP.String(), p.site, connid, logger.STATUS_INPROCESS, p.receivedBytes)
 		}
 	}
 }

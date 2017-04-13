@@ -15,12 +15,21 @@ var server net.Listener
 
 var t tip
 
+type Status int
+
+const (
+	STATUS_OPENED    Status = 1
+	STATUS_INPROCESS Status = 0
+	STATUS_CLOSED    Status = -1
+)
+
 type connection struct {
-	Process string `json:"process"`
-	Thru    string `json:"proxyserver"`
-	Host    string `json:"host"`
-	ID      int    `json:"connid"`
-	Opening bool   `json:"opening"`
+	Process  string `json:"process"`
+	Thru     string `json:"proxyserver"`
+	Host     string `json:"host"`
+	ID       int    `json:"connid"`
+	Opening  Status `json:"opening"`
+	Recieved uint64 `json:"recieved"`
 }
 
 func Init(port int) error {
@@ -43,16 +52,17 @@ func makeSingle() {
 	t.Conn = conn
 }
 
-func Log(process, proxyServer, host string, connid int, opening bool) {
+func Log(process, proxyServer, host string, connid int, opening Status, recieved uint64) {
 	if t.Closed {
 		return
 	}
 	conn := &connection{
-		Process: process,
-		Thru:    proxyServer,
-		Host:    host,
-		ID:      connid,
-		Opening: opening,
+		Process:  process,
+		Thru:     proxyServer,
+		Host:     host,
+		ID:       connid,
+		Opening:  opening,
+		Recieved: recieved,
 	}
 	b, err := json.Marshal(conn)
 	if err != nil {

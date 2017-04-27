@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 
 	"github.com/aki237/proGY/logger"
 )
@@ -35,15 +36,19 @@ type Config struct {
 	Verbose         bool   // Verbose : Whether to be verbose about the output
 	Domaincachefile string // Size of the DNS Cache to be saved during runtime
 	Loggerport      int    // What port to run the Logger at
+	ControlSocket   string // At which file to run the unix socket for controlling proGY
+	*sync.Mutex
 }
 
 func (c *Config) Reloader(fileChannel chan string) {
 	for {
 		filename := <-fileChannel
+		c.Lock()
 		temp := parseConfig(filename)
 		c.Creds = temp.Creds
 		c.Verbose = temp.Verbose
 		c.Domaincachefile = temp.Domaincachefile
+		c.Unlock()
 	}
 }
 
@@ -114,6 +119,7 @@ func main() {
 	wordPtr := flag.String("config", home+"/.progy", "Configuration file to be provided for proGY")
 	flag.Parse()
 	conf := parseConfig(*wordPtr)
+	conf.Mutex = &sync.Mutex{}
 	laddr, err := net.ResolveTCPAddr("tcp", conf.Listenaddress)
 	check(err)
 	listener, err := net.ListenTCP("tcp", laddr)
@@ -123,7 +129,7 @@ func main() {
 	err = logger.Init(conf.Loggerport)
 	check(err)
 	fileChannel := make(chan string)
-	go listenUnixControl(fileChannel)
+	go listenUnixControl(conf.ControlSocket, fileChannel)
 	go conf.Reloader(fileChannel)
 	for {
 		conn, err := listener.AcceptTCP()

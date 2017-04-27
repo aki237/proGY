@@ -8,8 +8,10 @@ import (
 	"strings"
 )
 
-func listenUnixControl(fileChannel chan string) {
-	socketName := "/tmp/proGY-control"
+func listenUnixControl(socketName string, fileChannel chan string) {
+	if socketName == "" {
+		socketName = "/tmp/proGY-control"
+	}
 	if _, err := os.Stat(socketName); err == nil {
 		if os.Remove(socketName) != nil {
 			fmt.Println(err)

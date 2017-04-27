@@ -46,6 +46,7 @@ following ...
 	],
 	"domaincachefile" : "<cacheFileLocation>",
 	"verbose":true,
+	"contorlsocket":"/tmp/proGY-control",
 	"loggerport" :  <SomePortAsInteger>
 }
 ```
@@ -72,6 +73,7 @@ following ...
 		}
     ],
 	"domaincachefile" : "/Users/stinson/.cache/dnscache.pgy",
+	"contorlsocket":"/tmp/proGY-control",
     "verbose":true,
     "loggerport" :  3030
 }
@@ -110,10 +112,10 @@ external binary dependancy, replicating the functionalities of `ss` and `ps` com
 write those packages will be apperitiated.
 
 ### Control Port
-A new feature for controlling proGY has been added. A unix socket running at `/tmp/proGY-control` will be running for controlling the 
-daemon. Syntax for controlling it will be like a simple QBasic statement. Right now only one command has been added.
-To reload the configuration on the fly without stopping use the [`socat`](http://www.dest-unreach.org/socat/) tool to connect to the
-domain socket and communicate with it.
+A new feature for controlling proGY has been added. A unix socket running at any location (Default Location if not specified : `/tmp/proGY-control`)
+specified in the config file will be running for controlling the daemon. Syntax for controlling it will be like a simple 
+QBasic statement. Right now only one command has been added. To reload the configuration on the fly without stopping use 
+the [`socat`](http://www.dest-unreach.org/socat/) tool to connect to the domain socket and communicate with it.
 ```shell
 $ socat - UNIX:/tmp/proGY-control
 RELOAD /etc/progy.json
@@ -123,5 +125,4 @@ RELOAD /etc/progy.json
 	**Usage** : `RELOAD [filename]` - any file with the proGY's configuration structure as specified above will be good.
 
 ## Future Plans
-+ Ability to write plugins for proGY using plugin language like Lisp
 + Enable transparent proxying for TLS connections also.

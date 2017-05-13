@@ -1,6 +1,6 @@
 %define debug_package %{nil}
 Name:           proGY
-Version:        2.0.3
+Version:        2.0.4
 Release:        1%{?dist}
 Summary:        Simple proxy authenticator
 
@@ -38,5 +38,8 @@ install -Dm644 proGY.service $RPM_BUILD_ROOT/usr/lib/systemd/system/proGY.servic
 echo "Make sure that you run 'proGY-setup-user.sh' command as the normal user as running proGY as root is not advised."
 
 %changelog
+* Sat May 13 2017 Akilan Elango <akilan1997@gmail.com> 2.0.4-1
+- new package built with tito
+
 * Sat May 13 2017 Akilan Elango <akilan1997@gmail.com>
 - Added control unix domain socket

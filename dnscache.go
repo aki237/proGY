@@ -36,7 +36,16 @@ func (d *Cache) LookupIP(domain string) (string, error) {
 			if err != nil || len(ips) < 1 {
 				return err
 			}
-			err = b.Put([]byte(domain), []byte(ips[0].String()))
+
+			var ipv4 []byte
+			for _, val := range ips {
+				ip4 := val.To4()
+				if ip4 != nil {
+					ipv4 = []byte(ip4.String())
+					break
+				}
+			}
+			err = b.Put([]byte(domain), ipv4)
 			IP = ips[0].String()
 			return err
 		}

@@ -40,6 +40,7 @@ type Config struct {
 	*sync.Mutex
 }
 
+// Reloader method reload the configuration when a command triggered in control port.
 func (c *Config) Reloader(fileChannel chan string) {
 	for {
 		filename := <-fileChannel
